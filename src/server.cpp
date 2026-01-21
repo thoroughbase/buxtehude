@@ -3,7 +3,8 @@
 #include <fmt/core.h>
 
 #include "client.hpp"
-#include "tb.hpp"
+
+#include <tb/tb.h>
 
 #include <ranges>
 

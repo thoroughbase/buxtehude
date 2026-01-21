@@ -2,7 +2,8 @@
 
 #include "core.hpp"
 #include "io.hpp"
-#include "tb.hpp"
+
+#include <tb/tb.h>
 
 #include <ctime>
 
