@@ -22,6 +22,8 @@
 
 #include <fcntl.h>
 
+#include <tb/tb.h>
+
 namespace buxtehude
 {
 
@@ -111,20 +113,12 @@ struct WriteError {};
 struct AllocError {};
 enum class ReadError { PARSE_ERROR, CONNECTION_ERROR, INCOMPLETE_MESSAGE };
 
-template<auto Deleter>
-struct LibeventDeleter
-{
-    constexpr void operator()(auto* ev) { Deleter(ev); }
-};
-
 template<typename T>
 T make(typename T::element_type* ptr) { return T { ptr }; }
 
-using UEvent = std::unique_ptr<event, LibeventDeleter<event_free>>;
-using UEventBase = std::unique_ptr<event_base,
-                                   LibeventDeleter<event_base_free>>;
-using UEvconnListener = std::unique_ptr<evconnlistener,
-                                        LibeventDeleter<evconnlistener_free>>;
+using UEvent = std::unique_ptr<event, tb::deleter<event_free>>;
+using UEventBase = std::unique_ptr<event_base, tb::deleter<event_base_free>>;
+using UEvconnListener = std::unique_ptr<evconnlistener, tb::deleter<evconnlistener_free>>;
 
 struct EventCallbackData
 {
