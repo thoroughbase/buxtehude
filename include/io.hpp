@@ -10,6 +10,10 @@
 
 #include <tb/tb.h>
 
+#include <cstdint>
+#include <string_view>
+#include <algorithm>
+
 namespace buxtehude
 {
 

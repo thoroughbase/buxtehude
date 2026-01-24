@@ -1,4 +1,4 @@
-#include <buxtehude/buxtehude.hpp>
+#include <buxtehude.hpp>
 
 #include <cstddef>
 #include <cstdio>

@@ -31,8 +31,8 @@ tb::error<ConnectError> Client::IPConnect(std::string_view hostname, uint16_t po
 
     addrinfo* res;
     addrinfo hints {
-        .ai_flags = AI_ADDRCONFIG,
-        .ai_family = AF_UNSPEC,
+        .ai_flags = AI_V4MAPPED | AI_ADDRCONFIG,
+        .ai_family = PF_INET | AF_UNSPEC,
         .ai_socktype = SOCK_STREAM
     };
 

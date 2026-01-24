@@ -1,8 +1,4 @@
 .DS_Store
 */.DS_Store
 build/*
-libbuxtehude.dylib
-libbuxtehude.a
-stream-test
-valid-test
-bux-test
+out/*

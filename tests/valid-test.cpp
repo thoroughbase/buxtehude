@@ -1,7 +1,7 @@
 #include <cstdio>
 
 #include <nlohmann/json.hpp>
-#include <buxtehude/validate.hpp>
+#include <validate.hpp>
 
 int main()
 {

@@ -3,7 +3,7 @@
 #include <cstring>
 #include <string>
 
-#include <buxtehude/io.hpp>
+#include <io.hpp>
 
 int main()
 {
