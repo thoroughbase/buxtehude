@@ -75,6 +75,7 @@ struct StreamError
 class ByteBuffer
 {
 public:
+    ByteBuffer() = default;
     ByteBuffer(size_t size);
 
     auto WriteFromStream(FILE* stream, size_t bytes) -> tb::error<IOError>;
@@ -124,8 +125,8 @@ public:
     void Close();
 
 private:
-    ByteBuffer read_buffer_ { BUFFER_SIZE };
-    ByteBuffer write_buffer_ { BUFFER_SIZE };
+    ByteBuffer read_buffer_;
+    ByteBuffer write_buffer_;
     UFile stream_handle_;
     UEvent read_event_, write_event_;
     ReadState read_state_ = ReadState::AWAITING_MESSAGE_FORMAT;

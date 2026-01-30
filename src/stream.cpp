@@ -132,6 +132,9 @@ auto Stream::FromSocket(FileDescriptor socket, event_base* ebase,
 
     event_add(stream.read_event_.get(), &callbacks::DEFAULT_TIMEOUT);
 
+    stream.read_buffer_ = ByteBuffer { BUFFER_SIZE };
+    stream.write_buffer_ = ByteBuffer { BUFFER_SIZE };
+
     return stream;
 }
 
