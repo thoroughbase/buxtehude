@@ -42,6 +42,9 @@ constexpr uint16_t DEFAULT_PORT = 1637;
 constexpr uint8_t CURRENT_VERSION        = 0;
 constexpr uint8_t MIN_COMPATIBLE_VERSION = 0;
 
+using ErrnoCode = int;
+constexpr ErrnoCode ERRNO_NO_ERROR = -1;
+
 using nlohmann::json;
 
 class Client;
@@ -57,52 +60,52 @@ enum class EventType
     WRITE_READY
 };
 
-enum class ConnectErrorType
-{
-    GETADDRINFO_ERROR, CONNECT_ERROR, LIBEVENT_ERROR, SOCKET_ERROR,
-    WRITE_ERROR, ALREADY_CONNECTED
-};
-
 struct ConnectError
 {
-    ConnectErrorType type;
-    int code = -1;
+    enum Type
+    {
+        GETADDRINFO_ERROR, CONNECT_ERROR, LIBEVENT_ERROR, SOCKET_ERROR,
+        WRITE_ERROR, ALREADY_CONNECTED
+    };
+
+    Type type;
+    ErrnoCode code = ERRNO_NO_ERROR;
 
     std::string What() const
     {
         switch (type) {
-        case ConnectErrorType::GETADDRINFO_ERROR:
+        case GETADDRINFO_ERROR:
             return fmt::format("getaddrinfo error: {}", gai_strerror(code));
-        case ConnectErrorType::CONNECT_ERROR:
+        case CONNECT_ERROR:
             return fmt::format("connect error: {}", strerror(code));
-        case ConnectErrorType::LIBEVENT_ERROR:
+        case LIBEVENT_ERROR:
             return "libevent structure initialisation error";
-        case ConnectErrorType::SOCKET_ERROR:
+        case SOCKET_ERROR:
             return fmt::format("socket error: {}", strerror(code));
-        case ConnectErrorType::WRITE_ERROR:
+        case WRITE_ERROR:
             return "handshake write error";
-        case ConnectErrorType::ALREADY_CONNECTED:
+        case ALREADY_CONNECTED:
             return "already connected";
         }
     }
 };
 
-enum class ListenErrorType
-{
-    LIBEVENT_ERROR, BIND_ERROR
-};
-
 struct ListenError
 {
-    ListenErrorType type;
-    int code = -1;
+    enum Type
+    {
+        LIBEVENT_ERROR, BIND_ERROR
+    };
+
+    Type type;
+    ErrnoCode code = ERRNO_NO_ERROR;
 
     std::string What() const
     {
         switch (type) {
-        case ListenErrorType::LIBEVENT_ERROR:
+        case LIBEVENT_ERROR:
             return "libevent structure initialisation error";
-        case ListenErrorType::BIND_ERROR:
+        case BIND_ERROR:
             return fmt::format("bind error: {}", strerror(code));
         }
     }

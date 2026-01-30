@@ -113,7 +113,7 @@ Server::~Server()
 tb::error<ListenError> Server::UnixServer(std::string_view path)
 {
     if (SetupEvents().is_error())
-        return ListenError { ListenErrorType::LIBEVENT_ERROR };
+        return ListenError { ListenError::LIBEVENT_ERROR };
 
     sockaddr_un addr;
     addr.sun_family = PF_LOCAL;
@@ -136,7 +136,7 @@ tb::error<ListenError> Server::UnixServer(std::string_view path)
             fmt::format("Failed to listen for UNIX domain connections at {}: {}",
                 path, strerror(errno)));
         unix_server = -1;
-        return ListenError { ListenErrorType::BIND_ERROR, errno };
+        return ListenError { ListenError::BIND_ERROR, errno };
     }
 
     unix_server = evconnlistener_get_fd(unix_listener.get());
@@ -150,7 +150,7 @@ tb::error<ListenError> Server::UnixServer(std::string_view path)
 tb::error<ListenError> Server::IPServer(uint16_t port)
 {
     if (SetupEvents().is_error())
-        return ListenError { ListenErrorType::LIBEVENT_ERROR };
+        return ListenError { ListenError::LIBEVENT_ERROR };
 
     sockaddr_in addr = {0};
     addr.sin_family = PF_INET;
@@ -171,7 +171,7 @@ tb::error<ListenError> Server::IPServer(uint16_t port)
             fmt::format("Failed to listen for internet domain connections on port {}: {}",
                 port, strerror(errno)));
         ip_server = -1;
-        return ListenError { ListenErrorType::BIND_ERROR, errno };
+        return ListenError { ListenError::BIND_ERROR, errno };
     }
 
     ip_server = evconnlistener_get_fd(ip_listener.get());

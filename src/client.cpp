@@ -25,7 +25,7 @@ Client::Client(const ClientPreferences& preferences) : preferences(preferences) 
 
 tb::error<ConnectError> Client::IPConnect(std::string_view hostname, uint16_t port)
 {
-    if (connected) return ConnectError { ConnectErrorType::ALREADY_CONNECTED };
+    if (connected) return ConnectError { ConnectError::ALREADY_CONNECTED };
 
     conn_type = ConnectionType::INTERNET;
 
@@ -40,14 +40,14 @@ tb::error<ConnectError> Client::IPConnect(std::string_view hostname, uint16_t po
         logger(LogLevel::WARNING,
             fmt::format("Failed to connect to address {}: getaddrinfo failed: {}",
                 hostname, gai_strerror(gai_error)));
-        return ConnectError { ConnectErrorType::GETADDRINFO_ERROR, gai_error };
+        return ConnectError { ConnectError::GETADDRINFO_ERROR, gai_error };
     }
 
     tb::scoped_guard addrinfo_guard = [res] () { freeaddrinfo(res); };
 
     int client_socket = socket(res->ai_family, res->ai_socktype, 0);
     if (client_socket == -1)
-        return ConnectError { ConnectErrorType::SOCKET_ERROR, errno };
+        return ConnectError { ConnectError::SOCKET_ERROR, errno };
 
     sockaddr_in* addr = reinterpret_cast<sockaddr_in*>(res->ai_addr);
     addr->sin_port = htons(port);
@@ -55,16 +55,16 @@ tb::error<ConnectError> Client::IPConnect(std::string_view hostname, uint16_t po
     if (connect(client_socket, reinterpret_cast<sockaddr*>(addr), sizeof(sockaddr_in))) {
         logger(LogLevel::WARNING, fmt::format("Failed to connect to address {}: {}",
             hostname, strerror(errno)));
-        return ConnectError { ConnectErrorType::CONNECT_ERROR, errno };
+        return ConnectError { ConnectError::CONNECT_ERROR, errno };
     }
 
     connected = true;
 
     if (SetupEvents(client_socket).is_error())
-        return ConnectError { ConnectErrorType::LIBEVENT_ERROR };
+        return ConnectError { ConnectError::LIBEVENT_ERROR };
 
     if (Handshake().is_error())
-        return ConnectError { ConnectErrorType::WRITE_ERROR };
+        return ConnectError { ConnectError::WRITE_ERROR };
 
     StartListening();
 
@@ -73,13 +73,13 @@ tb::error<ConnectError> Client::IPConnect(std::string_view hostname, uint16_t po
 
 tb::error<ConnectError> Client::UnixConnect(std::string_view path)
 {
-    if (connected) return ConnectError { ConnectErrorType::ALREADY_CONNECTED };
+    if (connected) return ConnectError { ConnectError::ALREADY_CONNECTED };
 
     conn_type = ConnectionType::UNIX;
 
     FileDescriptor client_socket = socket(PF_LOCAL, SOCK_STREAM, 0);
     if (client_socket == INVALID_FILE_DESCRIPTOR)
-        return ConnectError { ConnectErrorType::SOCKET_ERROR, errno };
+        return ConnectError { ConnectError::SOCKET_ERROR, errno };
 
     sockaddr_un addr;
     addr.sun_family = AF_LOCAL;
@@ -92,16 +92,16 @@ tb::error<ConnectError> Client::UnixConnect(std::string_view path)
     if (connect(client_socket, reinterpret_cast<sockaddr*>(&addr), sizeof(sockaddr_un))) {
         logger(LogLevel::WARNING, fmt::format("Failed to connect to file {}: {}",
             path, strerror(errno)));
-        return ConnectError { ConnectErrorType::CONNECT_ERROR, errno };
+        return ConnectError { ConnectError::CONNECT_ERROR, errno };
     }
 
     connected = true;
 
     if (SetupEvents(client_socket).is_error())
-        return ConnectError { ConnectErrorType::LIBEVENT_ERROR };
+        return ConnectError { ConnectError::LIBEVENT_ERROR };
 
     if (Handshake().is_error())
-        return ConnectError { ConnectErrorType::WRITE_ERROR };
+        return ConnectError { ConnectError::WRITE_ERROR };
 
     StartListening();
 
@@ -110,7 +110,7 @@ tb::error<ConnectError> Client::UnixConnect(std::string_view path)
 
 tb::error<ConnectError> Client::InternalConnect(Server& server)
 {
-    if (connected) return ConnectError { ConnectErrorType::ALREADY_CONNECTED };
+    if (connected) return ConnectError { ConnectError::ALREADY_CONNECTED };
 
     conn_type = ConnectionType::INTERNAL;
 
@@ -122,7 +122,7 @@ tb::error<ConnectError> Client::InternalConnect(Server& server)
     // trying to write for the handshake.
     if (Handshake().is_error()) {
         server_ptr = nullptr;
-        return ConnectError { ConnectErrorType::WRITE_ERROR };
+        return ConnectError { ConnectError::WRITE_ERROR };
     }
 
     StartListening();

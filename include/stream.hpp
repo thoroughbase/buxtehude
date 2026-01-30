@@ -18,12 +18,10 @@ namespace buxtehude
 {
 
 using Clock = std::chrono::high_resolution_clock;
-using ErrnoCode = int;
 using FileDescriptor = int;
 using TimePoint = std::chrono::time_point<Clock>;
 using UFile = std::unique_ptr<FILE, tb::deleter<fclose>>;
 
-constexpr ErrnoCode ERRNO_NO_ERROR = -1;
 constexpr FileDescriptor INVALID_FILE_DESCRIPTOR = -1;
 
 enum class ReadState
