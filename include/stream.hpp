@@ -72,26 +72,21 @@ struct StreamError
     IOError io_error;
 };
 
-struct IOResult
-{
-    size_t bytes;
-    tb::error<IOError> error;
-};
-
 class ByteBuffer
 {
 public:
     ByteBuffer(size_t size);
 
-    auto WriteFromStream(FILE* stream, size_t bytes) -> IOResult;
-    auto WriteFromMemory(tb::contiguous_byte_range auto const& source) -> IOResult;
+    auto WriteFromStream(FILE* stream, size_t bytes) -> tb::error<IOError>;
+    auto WriteFromMemory(tb::contiguous_byte_range auto const& source)
+    -> tb::error<IOError>;
 
     template<typename T> requires std::is_scalar_v<T>
-    auto WriteFromMemory(T object) -> IOResult;
-    auto ReadIntoStream(FILE* stream, size_t bytes) -> IOResult;
+    auto WriteFromMemory(T object) -> tb::error<IOError>;
+    auto ReadIntoStream(FILE* stream, size_t bytes) -> tb::error<IOError>;
 
     template<typename T> requires std::is_scalar_v<T>
-    auto ReadIntoMemory(T& object) -> IOResult;
+    auto ReadIntoMemory(T& object) -> tb::error<IOError>;
 
     void Reset();
     auto BytesToRead() const -> size_t;

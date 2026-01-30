@@ -7,50 +7,51 @@ namespace buxtehude
 
 ByteBuffer::ByteBuffer(size_t size) : data_(size) {}
 
-auto ByteBuffer::WriteFromStream(FILE* stream, size_t bytes) -> IOResult
+auto ByteBuffer::WriteFromStream(FILE* stream, size_t bytes) -> tb::error<IOError>
 {
     if (write_position_ + bytes > data_.view().size())
-        return { 0, IOError { IOError::BUFFER_FULL } };
+        return IOError { IOError::BUFFER_FULL };
 
     size_t bytes_read = fread(data_.view().data() + write_position_, 1, bytes, stream);
     write_position_ += bytes_read;
 
     if (bytes_read < bytes) {
         if (feof(stream))
-            return { bytes_read, IOError { IOError::STREAM_CLOSED, errno } };
-        return { bytes_read, IOError { IOError::FILE_ERROR, errno } };
+            return IOError { IOError::STREAM_CLOSED, errno };
+        return IOError { IOError::FILE_ERROR, errno };
     }
 
-    return { bytes_read, tb::ok };
+    return tb::ok;
 }
 
-auto ByteBuffer::WriteFromMemory(tb::contiguous_byte_range auto const& source) -> IOResult
+auto ByteBuffer::WriteFromMemory(tb::contiguous_byte_range auto const& source)
+-> tb::error<IOError>
 {
     if (write_position_ + std::size(source) > data_.view().size())
-        return { 0, IOError { IOError::BUFFER_FULL } };
+        return IOError { IOError::BUFFER_FULL };
 
     memcpy(data_.view().data() + write_position_, std::data(source), std::size(source));
     write_position_ += source.size();
 
-    return { std::size(source), tb::ok };
+    return tb::ok;
 }
 
 template<typename T> requires std::is_scalar_v<T>
-auto ByteBuffer::WriteFromMemory(T object) -> IOResult
+auto ByteBuffer::WriteFromMemory(T object) -> tb::error<IOError>
 {
     if (write_position_ + sizeof(T) > data_.view().size())
-        return { 0, IOError { IOError::BUFFER_FULL } };
+        return IOError { IOError::BUFFER_FULL };
 
     memcpy(data_.view().data() + write_position_, &object, sizeof(T));
     write_position_ += sizeof(T);
 
-    return { sizeof(T), tb::ok };
+    return tb::ok;
 }
 
-auto ByteBuffer::ReadIntoStream(FILE* stream, size_t bytes) -> IOResult
+auto ByteBuffer::ReadIntoStream(FILE* stream, size_t bytes) -> tb::error<IOError>
 {
     if (read_position_ == write_position_)
-        return { 0, IOError { IOError::BUFFER_EMPTY } };
+        return IOError { IOError::BUFFER_EMPTY };
 
     bytes = std::min(BytesToRead(), bytes);
 
@@ -59,23 +60,23 @@ auto ByteBuffer::ReadIntoStream(FILE* stream, size_t bytes) -> IOResult
 
     if (bytes_written < bytes) {
         if (feof(stream))
-            return { bytes_written, IOError { IOError::STREAM_CLOSED, errno } };
-        return { bytes_written, IOError { IOError::FILE_ERROR, errno } };
+            return IOError { IOError::STREAM_CLOSED, errno };
+        return IOError { IOError::FILE_ERROR, errno };
     }
 
-    return { bytes, tb::ok };
+    return tb::ok;
 }
 
 template<typename T> requires std::is_scalar_v<T>
-auto ByteBuffer::ReadIntoMemory(T& object) -> IOResult
+auto ByteBuffer::ReadIntoMemory(T& object) -> tb::error<IOError>
 {
     if (BytesToRead() < sizeof(T))
-        return { 0, IOError { IOError::BUFFER_EMPTY } };
+        return IOError { IOError::BUFFER_EMPTY };
 
     memcpy(&object, data_.view().data() + read_position_, sizeof(T));
     read_position_ += sizeof(T);
 
-    return { sizeof(T), tb::ok };
+    return tb::ok;
 }
 
 void ByteBuffer::Reset()
@@ -146,18 +147,18 @@ auto Stream::WriteMessage(MessageFormat format, const Message& message)
         std::string serialised = object.dump();
 
         std::ignore = write_buffer_.WriteFromMemory<uint32_t>(serialised.size());
-        if (auto [_, io_error] = write_buffer_.WriteFromMemory(serialised);
+        if (auto io_error = write_buffer_.WriteFromMemory(serialised);
             io_error.is_error())
-            return io_error.get_error();
+            return io_error;
         break;
     }
     case MessageFormat::MSGPACK: {
         std::vector<uint8_t> serialised = json::to_msgpack(message);
 
         std::ignore = write_buffer_.WriteFromMemory<uint32_t>(serialised.size());
-        if (auto [_, io_error] = write_buffer_.WriteFromMemory(serialised);
+        if (auto io_error = write_buffer_.WriteFromMemory(serialised);
             io_error.is_error())
-            return io_error.get_error();
+            return io_error;
         break;
     }
     }
@@ -175,15 +176,14 @@ auto Stream::ReadMessage() -> tb::result<Message, StreamError>
     clearerr(stream_handle_.get());
 
     if (read_state_ == ReadState::AWAITING_MESSAGE_FORMAT) {
-        auto [_, io_error]
-            = read_buffer_.WriteFromStream(
-                stream_handle_.get(),
-                sizeof(MessageFormat) - read_buffer_.BytesToRead()
-            );
+        auto io_error = read_buffer_.WriteFromStream(
+            stream_handle_.get(),
+            sizeof(MessageFormat) - read_buffer_.BytesToRead()
+        );
         if (io_error.is_error())
             return StreamError { StreamError::IO_ERROR, io_error.get_error() };
 
-        std::ignore = read_buffer_.ReadIntoMemory(expected_format_);
+        read_buffer_.ReadIntoMemory(expected_format_).ignore_error();
         if (expected_format_ != MessageFormat::JSON
             && expected_format_ != MessageFormat::MSGPACK) {
             reset_stream_state();
@@ -194,15 +194,14 @@ auto Stream::ReadMessage() -> tb::result<Message, StreamError>
     }
 
     if (read_state_ == ReadState::AWAITING_MESSAGE_LENGTH) {
-        auto [_, io_error]
-            = read_buffer_.WriteFromStream(
-                stream_handle_.get(),
-                sizeof(uint32_t) - read_buffer_.BytesToRead()
-            );
+        auto io_error = read_buffer_.WriteFromStream(
+            stream_handle_.get(),
+            sizeof(uint32_t) - read_buffer_.BytesToRead()
+        );
         if (io_error.is_error())
             return StreamError { StreamError::IO_ERROR, io_error.get_error() };
 
-        std::ignore = read_buffer_.ReadIntoMemory(expected_length_);
+        read_buffer_.ReadIntoMemory(expected_length_).ignore_error();
         if (expected_length_ > MAX_MESSAGE_LENGTH) {
             reset_stream_state();
             return StreamError { StreamError::INVALID_MESSAGE_LENGTH };
@@ -213,11 +212,10 @@ auto Stream::ReadMessage() -> tb::result<Message, StreamError>
 
     json object;
     if (read_state_ == ReadState::AWAITING_MESSAGE_DATA) {
-        auto [_, io_error]
-            = read_buffer_.WriteFromStream(
-                stream_handle_.get(),
-                expected_length_ - read_buffer_.BytesToRead()
-            );
+        auto io_error = read_buffer_.WriteFromStream(
+            stream_handle_.get(),
+            expected_length_ - read_buffer_.BytesToRead()
+        );
         if (io_error.is_error())
             return StreamError { StreamError::IO_ERROR, io_error.get_error() };
 
@@ -241,7 +239,7 @@ auto Stream::Flush() -> tb::error<IOError>
 {
     clearerr(stream_handle_.get());
 
-    auto [_, io_error] = write_buffer_.ReadIntoStream(
+    auto io_error = write_buffer_.ReadIntoStream(
         stream_handle_.get(),
         write_buffer_.BytesToRead()
     );
