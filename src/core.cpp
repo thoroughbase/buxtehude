@@ -5,6 +5,8 @@
 
 #include <signal.h>
 
+#include "stream.hpp"
+
 namespace buxtehude
 {
 
@@ -60,52 +62,6 @@ void Initialise(LogCallback logcb, SignalHandler sigh)
     sigaction(SIGPIPE, &sighandle, nullptr);
 }
 
-// Message struct functions
-
-Message Message::Deserialise(MessageFormat f, std::string_view data)
-{
-    switch (f) {
-    case MessageFormat::JSON:
-        return json::parse(data).get<Message>();
-    case MessageFormat::MSGPACK:
-        return json::from_msgpack(data).get<Message>();
-    }
-}
-
-auto Message::WriteToStream(Stream& stream, const Message& message, MessageFormat f)
--> tb::error<int>
-{
-    constexpr size_t HEADER_SIZE = sizeof(uint32_t) + sizeof(MessageFormat);
-
-    json object = message;
-    switch (f) {
-    case MessageFormat::JSON: {
-        // nlohmann JSON does not offer a function for parsing JSON & writing through
-        // an output adapter.
-        std::string data = object.dump();
-        uint32_t msg_len = data.size();
-
-        data.insert(data.begin(), HEADER_SIZE, '\0');
-        memcpy(data.data(), &f, sizeof(MessageFormat));
-        memcpy(data.data() + sizeof(MessageFormat), &msg_len, sizeof(uint32_t));
-
-        return stream.TryWrite(data);
-    }
-    case MessageFormat::MSGPACK: {
-        std::vector<uint8_t> data;
-        data.reserve(1024);
-        data.insert(data.begin(), HEADER_SIZE, '\0');
-        json::to_msgpack(object, data);
-
-        uint32_t msg_len = data.size() - HEADER_SIZE;
-        memcpy(data.data(), &f, sizeof(MessageFormat));
-        memcpy(data.data() + sizeof(MessageFormat), &msg_len, sizeof(uint32_t));
-
-        return stream.TryWrite(data);
-    }
-    }
-}
-
 namespace callbacks
 {
 
@@ -114,12 +70,12 @@ void ConnectionCallback(evconnlistener* listener, evutil_socket_t fd,
 {
     auto* ecdata = static_cast<EventCallbackData*>(data);
 
-    ecdata->fd = fd;
+    ecdata->socket = fd;
     ecdata->address = *addr;
-    ecdata->addr_len = addr_len;
+    ecdata->address_length = addr_len;
     ecdata->type = EventType::NEW_CONNECTION;
 
-    event_base_loopbreak(ecdata->ebase);
+    event_base_loopbreak(ecdata->event_base);
 
     // If there is a queue of connections, these callbacks will run in succession
     // even with a call to event_base_loopbreak(). Disabling the listener will
@@ -132,26 +88,26 @@ void ReadWriteCallback(evutil_socket_t fd, short what, void* data)
 {
     auto* ecdata = static_cast<EventCallbackData*>(data);
 
-    ecdata->fd = fd;
+    ecdata->socket = fd;
     if (what & EV_READ) ecdata->type = EventType::READ_READY;
     else if (what & EV_WRITE) ecdata->type = EventType::WRITE_READY;
     else if (what & EV_TIMEOUT) ecdata->type = EventType::TIMEOUT;
 
-    event_base_loopbreak(ecdata->ebase);
+    event_base_loopbreak(ecdata->event_base);
 }
 
 void LoopInterruptCallback(evutil_socket_t fd, short what, void* data)
 {
     auto* ecdata = static_cast<EventCallbackData*>(data);
     ecdata->type = EventType::INTERRUPT;
-    event_base_loopbreak(ecdata->ebase);
+    event_base_loopbreak(ecdata->event_base);
 }
 
 void InternalReadCallback(evutil_socket_t fd, short what, void* data)
 {
     auto* ecdata = static_cast<EventCallbackData*>(data);
     ecdata->type = EventType::INTERNAL_READ_READY;
-    event_base_loopbreak(ecdata->ebase);
+    event_base_loopbreak(ecdata->event_base);
 }
 
 }

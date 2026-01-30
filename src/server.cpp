@@ -19,29 +19,15 @@ ClientHandle::ClientHandle(Client& iclient, std::string_view teamname)
     preferences.teamname = teamname;
 }
 
-ClientHandle::ClientHandle(ConnectionType conn_type, FILE* ptr, uint32_t max_msg_len)
+ClientHandle::ClientHandle(ConnectionType conn_type, FileDescriptor socket,
+    event_base* ebase, EventCallbackData& callback_data)
     : conn_type(conn_type)
 {
-    stream.file = ptr;
-    setvbuf(stream.file, nullptr, _IONBF, 0);
-    stream.Await<MessageFormat>().Await<uint32_t>()
-          .Then([this, max_msg_len] (Stream& s, Field& f) {
-        auto type = f[-1].Get<MessageFormat>();
-        if (type != MessageFormat::JSON && type != MessageFormat::MSGPACK) {
-            s.Reset();
-            Error("Invalid message type!");
-            return;
-        }
-        auto size = f.Get<uint32_t>();
-        if (size > max_msg_len) {
-            s.Reset();
-            Error("Buffer size too big!");
-            return;
-        }
-        s.Await(size);
-    });
+    auto stream_or_err = Stream::FromSocket(socket, ebase, callback_data);
+    if (stream_or_err.is_error())
+        return;
 
-    socket = fileno(ptr);
+    stream = std::move(stream_or_err.get_mut_unchecked());
     connected = true;
     if (Handshake().is_error()) Disconnect_NoWrite();
 }
@@ -67,11 +53,7 @@ tb::error<WriteError> ClientHandle::Write(const Message& msg)
         return tb::ok;
     }
 
-    clearerr(stream.file);
-
-    Message::WriteToStream(stream, msg, preferences.format).if_err([&] (int) {
-        event_add(write_event.get(), nullptr);
-    });
+    stream.WriteMessage(preferences.format, msg).ignore_error();
 
     return tb::ok;
 }
@@ -102,7 +84,7 @@ void ClientHandle::Disconnect_NoWrite()
 {
     if (!connected) return;
     if (conn_type == ConnectionType::UNIX || conn_type == ConnectionType::INTERNET) {
-        fclose(stream.file);
+        stream.Close();
     } else if (conn_type == ConnectionType::INTERNAL) {
         client_ptr->Internal_Disconnect();
     }
@@ -117,35 +99,6 @@ bool ClientHandle::Available(std::string_view type)
 }
 
 // ClientHandle functions specific to stream-based connections
-
-tb::result<Message, ReadError> ClientHandle::Read()
-{
-    if (!stream.Read()) {
-        if (stream.Status() == StreamStatus::REACHED_EOF) {
-            Disconnect();
-            return { ReadError::CONNECTION_ERROR };
-        } else {
-            return { ReadError::INCOMPLETE_MESSAGE };
-        }
-    }
-
-    std::string_view data = stream[2].GetView();
-    tb::scoped_guard reset_stream = [this] {
-        stream.Delete(stream[2]);
-        stream.Reset();
-    };
-
-    try {
-        return { Message::Deserialise(stream[0].Get<MessageFormat>(), data) };
-    } catch (const json::parse_error& e) {
-        std::string error = fmt::format("Error parsing message from {}: {}",
-            preferences.teamname, e.what());
-        logger(LogLevel::WARNING, error);
-        Error(error);
-    }
-
-    return { ReadError::PARSE_ERROR };
-}
 
 // Server
 // Server constructors & destructor
@@ -314,8 +267,14 @@ void Server::Internal_ReceiveFrom(Client& cl, const Message& msg)
 
 void Server::Serve(HandleIter client_handle)
 {
-    client_handle->Read().if_ok_mut([this, client_handle] (Message& message) {
+    client_handle->stream.ReadMessage()
+    .if_ok_mut([this, client_handle] (Message& message) {
         HandleMessage(*client_handle, std::move(message));
+    }).if_err([client_handle] (StreamError error) {
+        if (error.type == StreamError::IO_ERROR
+            && error.io_error.type == IOError::STREAM_CLOSED) {
+            client_handle->Disconnect();
+        }
     });
 
     if (!client_handle->connected) {
@@ -342,7 +301,6 @@ void Server::HandleMessage(ClientHandle& client_handle, Message&& msg)
 
         client_handle.preferences.teamname = msg.content["teamname"];
         client_handle.preferences.format = msg.content["format"];
-        client_handle.preferences.max_msg_length = msg.content["max-message-length"];
         client_handle.handshaken = true;
         return;
     }
@@ -392,7 +350,7 @@ tb::error<AllocError> Server::SetupEvents()
     if (ebase) return tb::ok;
 
     ebase = make<UEventBase>(event_base_new());
-    callback_data.ebase = ebase.get();
+    callback_data.event_base = ebase.get();
 
     interrupt_event = make<UEvent>(
         event_new(ebase.get(), -1, EV_PERSIST, callbacks::LoopInterruptCallback,
@@ -417,19 +375,19 @@ void Server::Listen()
         switch (callback_data.type) {
         case EventType::NEW_CONNECTION: {
             std::lock_guard<std::mutex> guard(clients_mutex);
-            AddConnection(callback_data.fd, callback_data.address.sa_family);
+            AddConnection(callback_data.socket, callback_data.address.sa_family);
             break;
         }
         case EventType::READ_READY: {
             std::lock_guard<std::mutex> guard(clients_mutex);
-            Server::HandleIter iter = GetClientBySocket(callback_data.fd);
+            Server::HandleIter iter = GetClientBySocket(callback_data.socket);
             if (iter == clients.end()) break;
             Serve(iter);
 
             break;
         }
         case EventType::TIMEOUT: {
-            Server::HandleIter iter = GetClientBySocket(callback_data.fd);
+            Server::HandleIter iter = GetClientBySocket(callback_data.socket);
             if (iter == clients.end()) break;
 
             if (!iter->handshaken) iter->Disconnect("Failed handshake");
@@ -454,12 +412,10 @@ void Server::Listen()
             return;
         case EventType::WRITE_READY:
             std::lock_guard<std::mutex> guard(clients_mutex);
-            Server::HandleIter iter = GetClientBySocket(callback_data.fd);
+            Server::HandleIter iter = GetClientBySocket(callback_data.socket);
             if (iter == clients.end()) break;
 
-            iter->stream.Flush().if_err([&] (int) {
-                event_add(iter->write_event.get(), nullptr);
-            });
+            iter->stream.Flush().ignore_error();
             break;
         }
     }
@@ -467,12 +423,6 @@ void Server::Listen()
 
 void Server::AddConnection(int fd, sa_family_t addr_family)
 {
-    FILE* stream = fdopen(fd, "r+");
-
-    setvbuf(stream, nullptr, _IONBF, 0);
-    int flags = fcntl(fd, F_GETFL);
-    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-
     ConnectionType conn_type;
     std::string_view debug_string;
 
@@ -490,19 +440,7 @@ void Server::AddConnection(int fd, sa_family_t addr_family)
         break;
     }
 
-    auto& handle_ref = clients.emplace_back(conn_type, stream, max_msg_length);
-
-    handle_ref.read_event = make<UEvent>(
-        event_new(ebase.get(), fd, EV_PERSIST | EV_READ,
-                  callbacks::ReadWriteCallback, &callback_data)
-    );
-
-    handle_ref.write_event = make<UEvent>(
-        event_new(ebase.get(), fd, EV_WRITE,
-                  callbacks::ReadWriteCallback, static_cast<void*>(&callback_data))
-    );
-
-    event_add(handle_ref.read_event.get(), &callbacks::DEFAULT_TIMEOUT);
+    clients.emplace_back(conn_type, fd, ebase.get(), callback_data);
 
     logger(LogLevel::DEBUG,
         fmt::format("New client connected on {} domain, fd = {}", debug_string, fd));
@@ -514,7 +452,7 @@ auto Server::GetClientBySocket(int fd) -> HandleIter
 {
     auto iter = std::ranges::find_if(clients,
         [fd] (ClientHandle& handle) {
-            return handle.socket == fd;
+            return handle.stream.GetSocket() == fd;
         }
     );
 

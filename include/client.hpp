@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core.hpp"
-#include "io.hpp"
+#include "stream.hpp"
 
 #include <tb/tb.h>
 
@@ -54,7 +54,7 @@ private: // Only for INTERNAL clients
     void Internal_Disconnect();
 private:
     // Only for socket-based connections
-    tb::error<AllocError> SetupEvents();
+    tb::error<AllocError> SetupEvents(FileDescriptor socket);
     void StartListening();
     void Read();
     void Listen();
@@ -65,7 +65,6 @@ private:
 
     ConnectionType conn_type;
 
-    int client_socket = -1;
     Stream stream;
     std::atomic<Server*> server_ptr = nullptr;
 
@@ -77,7 +76,7 @@ private:
 
     // Libevent internals
     UEventBase ebase;
-    UEvent read_event, interrupt_event, write_event;
+    UEvent interrupt_event;
 
     EventCallbackData callback_data;
 };

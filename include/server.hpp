@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core.hpp"
-#include "io.hpp"
+#include "stream.hpp"
 
 #include <tb/tb.h>
 
@@ -30,7 +30,8 @@ class ClientHandle
 {
 public:
     ClientHandle(Client& iclient, std::string_view teamname);
-    ClientHandle(ConnectionType conn_type, FILE* ptr, uint32_t max_msg_len);
+    ClientHandle(ConnectionType conn_type, FileDescriptor socket, event_base* ebase,
+        EventCallbackData& callback_data);
 
     ClientHandle(const ClientHandle&) = delete;
     ClientHandle& operator=(const ClientHandle&) = delete;
@@ -48,20 +49,14 @@ public:
 
     bool Available(std::string_view type);
 
-    // Try to read a message from the socket - only for INTERNET/UNIX
-    tb::result<Message, ReadError> Read();
-
     Stream stream; // Only for UNIX/INTERNET
     std::time_t last_error = 0;
 
     std::vector<std::string> unavailable;
-    UEvent read_event, write_event;
     Client* client_ptr = nullptr; // Only for INTERNAL connections
 
     ConnectionType conn_type;
     ClientPreferences preferences;
-
-    int socket = -1;
 
     bool handshaken = false;
     bool connected = false;
@@ -79,8 +74,6 @@ public:
     tb::error<AllocError> InternalServer();
 
     void Close();
-
-    uint32_t max_msg_length = DEFAULT_MAX_MESSAGE_LENGTH;
 private: // For INTERNAL connections only.
     friend Client;
     void Internal_AddClient(Client& cl);
@@ -97,7 +90,7 @@ private:
     // Only if listening sockets are opened
     tb::error<AllocError> SetupEvents();
     void Listen();
-    void AddConnection(int fd, sa_family_t addr_type);
+    void AddConnection(FileDescriptor socket, sa_family_t addr_type);
 
     // Retrieving clients
     HandleIter GetClientBySocket(int fd);
@@ -113,8 +106,8 @@ private:
     bool started = false;
 
     // File descriptors for listening sockets
-    int unix_server = -1;
-    int ip_server = -1;
+    FileDescriptor unix_server = INVALID_FILE_DESCRIPTOR;
+    FileDescriptor ip_server = INVALID_FILE_DESCRIPTOR;
 
     std::string unix_path;
 

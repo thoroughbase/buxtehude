@@ -18,7 +18,6 @@
 #include <fmt/core.h>
 
 #include "validate.hpp"
-#include "io.hpp"
 
 #include <fcntl.h>
 
@@ -37,7 +36,7 @@ constexpr std::string_view MSG_SERVER     = "$$server";
 constexpr std::string_view MSG_SUBSCRIBE  = "$$subscribe";
 constexpr std::string_view MSG_YOU        = "$$you";
 
-constexpr uint32_t DEFAULT_MAX_MESSAGE_LENGTH = 1024 * 128;
+constexpr uint32_t MAX_MESSAGE_LENGTH = 1024 * 256;
 constexpr uint16_t DEFAULT_PORT = 1637;
 
 constexpr uint8_t CURRENT_VERSION        = 0;
@@ -111,7 +110,6 @@ struct ListenError
 
 struct WriteError {};
 struct AllocError {};
-enum class ReadError { PARSE_ERROR, CONNECTION_ERROR, INCOMPLETE_MESSAGE };
 
 template<typename T>
 T make(typename T::element_type* ptr) { return T { ptr }; }
@@ -120,24 +118,11 @@ using UEvent = std::unique_ptr<event, tb::deleter<event_free>>;
 using UEventBase = std::unique_ptr<event_base, tb::deleter<event_base_free>>;
 using UEvconnListener = std::unique_ptr<evconnlistener, tb::deleter<evconnlistener_free>>;
 
-struct EventCallbackData
-{
-    sockaddr address;
-    event_base* ebase;
-    int fd;
-    EventType type;
-    int addr_len;
-};
-
 struct Message
 {
     std::string dest, src, type;
     json content;
     bool only_first = false;
-
-    static Message Deserialise(MessageFormat f, std::string_view data);
-    static auto WriteToStream(Stream& stream, const Message& m, MessageFormat f)
-    -> tb::error<int>;
 };
 
 void to_json(json& j, const Message& msg);
@@ -147,7 +132,6 @@ struct ClientPreferences
 {
     std::string teamname = "default";
     MessageFormat format = MessageFormat::MSGPACK;
-    uint32_t max_msg_length = DEFAULT_MAX_MESSAGE_LENGTH;
 };
 
 using Handler = std::function<void(Client&, const Message&)>;
@@ -172,7 +156,6 @@ inline const ValidationSeries VALIDATE_HANDSHAKE_SERVERSIDE = {
         MessageFormat::JSON, MessageFormat::MSGPACK
       })
     },
-    { "/max-message-length"_json_pointer, predicates::IsNumber },
     VERSION_CHECK
 };
 

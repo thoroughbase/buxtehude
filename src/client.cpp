@@ -45,7 +45,7 @@ tb::error<ConnectError> Client::IPConnect(std::string_view hostname, uint16_t po
 
     tb::scoped_guard addrinfo_guard = [res] () { freeaddrinfo(res); };
 
-    client_socket = socket(res->ai_family, res->ai_socktype, 0);
+    int client_socket = socket(res->ai_family, res->ai_socktype, 0);
     if (client_socket == -1)
         return ConnectError { ConnectErrorType::SOCKET_ERROR, errno };
 
@@ -60,7 +60,7 @@ tb::error<ConnectError> Client::IPConnect(std::string_view hostname, uint16_t po
 
     connected = true;
 
-    if (SetupEvents().is_error())
+    if (SetupEvents(client_socket).is_error())
         return ConnectError { ConnectErrorType::LIBEVENT_ERROR };
 
     if (Handshake().is_error())
@@ -77,8 +77,8 @@ tb::error<ConnectError> Client::UnixConnect(std::string_view path)
 
     conn_type = ConnectionType::UNIX;
 
-    client_socket = socket(PF_LOCAL, SOCK_STREAM, 0);
-    if (client_socket == -1)
+    FileDescriptor client_socket = socket(PF_LOCAL, SOCK_STREAM, 0);
+    if (client_socket == INVALID_FILE_DESCRIPTOR)
         return ConnectError { ConnectErrorType::SOCKET_ERROR, errno };
 
     sockaddr_un addr;
@@ -97,7 +97,7 @@ tb::error<ConnectError> Client::UnixConnect(std::string_view path)
 
     connected = true;
 
-    if (SetupEvents().is_error())
+    if (SetupEvents(client_socket).is_error())
         return ConnectError { ConnectErrorType::LIBEVENT_ERROR };
 
     if (Handshake().is_error())
@@ -142,11 +142,14 @@ tb::error<WriteError> Client::Write(const Message& msg)
         return tb::ok;
     }
 
-    clearerr(stream.file);
-
-    Message::WriteToStream(stream, msg, preferences.format).if_err([&] (int) {
-        event_add(write_event.get(), nullptr);
-    });
+    auto result = stream.WriteMessage(preferences.format, msg);
+    if (result.is_error()) {
+        IOError error = result.get_error();
+        if (error.type == IOError::STREAM_CLOSED) {
+            Disconnect();
+        }
+        return WriteError {};
+    }
 
     return tb::ok;
 }
@@ -161,7 +164,6 @@ tb::error<WriteError> Client::Handshake()
             { "format", preferences.format },
             { "teamname", preferences.teamname },
             { "version", CURRENT_VERSION },
-            { "max-message-length", preferences.max_msg_length }
         }
     });
 }
@@ -243,9 +245,8 @@ void Client::Disconnect()
 
     logger(LogLevel::DEBUG, "Disconnecting client");
 
-    if (conn_type != ConnectionType::INTERNAL && stream.file) {
+    if (conn_type != ConnectionType::INTERNAL) {
         event_active(interrupt_event.get(), 0, 0);
-        fclose(stream.file);
     } else if (conn_type == ConnectionType::INTERNAL && server_ptr) {
         server_ptr.load()->Internal_RemoveClient(*this);
     }
@@ -271,77 +272,28 @@ void Client::Internal_Receive(const Message& msg)
 
 // Socket-based connections only
 
-tb::error<AllocError> Client::SetupEvents()
+tb::error<AllocError> Client::SetupEvents(FileDescriptor socket)
 {
     ebase = make<UEventBase>(event_base_new());
-    callback_data.ebase = ebase.get();
-
-    read_event = make<UEvent>(
-        event_new(ebase.get(), client_socket, EV_PERSIST | EV_READ,
-                  callbacks::ReadWriteCallback, static_cast<void*>(&callback_data))
-    );
-
-    write_event = make<UEvent>(
-        event_new(ebase.get(), client_socket, EV_WRITE,
-                  callbacks::ReadWriteCallback, static_cast<void*>(&callback_data))
-    );
+    callback_data.event_base = ebase.get();
 
     interrupt_event = make<UEvent>(
         event_new(ebase.get(), -1, EV_PERSIST,
                   callbacks::LoopInterruptCallback, &callback_data)
     );
 
-    if (!ebase || !read_event || !write_event || !interrupt_event) {
+    if (!ebase || !interrupt_event) {
         logger(LogLevel::WARNING, "Failed to create one or more libevent structures");
         return AllocError {};
     }
 
-    event_add(read_event.get(), &callbacks::DEFAULT_TIMEOUT);
+    auto stream_or_err = Stream::FromSocket(socket, ebase.get(), callback_data);
+    if (stream_or_err.is_error())
+        return AllocError {};
 
-    stream.file = fdopen(client_socket, "r+");
-
-    setvbuf(stream.file, nullptr, _IONBF, 0);
-    int flags = fcntl(client_socket, F_GETFL);
-    fcntl(client_socket, F_SETFL, flags | O_NONBLOCK);
-
-    stream.ClearFields();
-    stream.Await<MessageFormat>().Await<uint32_t>()
-          .Then([this] (Stream& stream, Field& f) {
-        auto type = f[-1].Get<MessageFormat>();
-        if (type != MessageFormat::JSON && type != MessageFormat::MSGPACK) {
-            stream.Reset();
-            logger(LogLevel::WARNING, "Invalid message type!");
-            return;
-        }
-        auto size = f.Get<uint32_t>();
-        if (size > preferences.max_msg_length) {
-            stream.Reset();
-            logger(LogLevel::WARNING, "Buffer size too big!");
-            return;
-        }
-        stream.Await(size);
-    });
+    stream = std::move(stream_or_err.get_mut_unchecked());
 
     return tb::ok;
-}
-
-void Client::Read()
-{
-    if (!stream.Read()) {
-        if (stream.Status() == StreamStatus::REACHED_EOF) Disconnect();
-        return;
-    }
-
-    std::string_view data = stream[2].GetView();
-
-    try {
-        HandleMessage(Message::Deserialise(stream[0].Get<MessageFormat>(), data));
-    } catch (const json::parse_error& e) {
-        logger(LogLevel::WARNING, fmt::format("Error parsing message: {}", e.what()));
-    }
-
-    stream.Delete(stream[2]);
-    stream.Reset();
 }
 
 void Client::Listen()
@@ -349,13 +301,20 @@ void Client::Listen()
     while (event_base_dispatch(ebase.get()) == 0) {
         switch (callback_data.type) {
         case EventType::READ_READY:
-            Read();
+            stream.ReadMessage().if_ok_mut([this] (const Message& msg) {
+                HandleMessage(msg);
+            }).if_err([this] (StreamError error) {
+                if (error.type == StreamError::IO_ERROR
+                    && error.io_error.type == IOError::STREAM_CLOSED)
+                    Disconnect();
+            });
             break;
         case EventType::INTERRUPT:
             return;
         case EventType::WRITE_READY:
-            stream.Flush().if_err([&] (int) {
-                event_add(write_event.get(), nullptr);
+            stream.Flush().if_err([this] (IOError error) {
+                if (error.type == IOError::STREAM_CLOSED)
+                    Disconnect();
             });
             break;
         default:
