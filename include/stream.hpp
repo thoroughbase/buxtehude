@@ -17,9 +17,7 @@
 namespace buxtehude
 {
 
-using Clock = std::chrono::high_resolution_clock;
 using FileDescriptor = int;
-using TimePoint = std::chrono::time_point<Clock>;
 using UFile = std::unique_ptr<FILE, tb::deleter<fclose>>;
 
 constexpr FileDescriptor INVALID_FILE_DESCRIPTOR = -1;

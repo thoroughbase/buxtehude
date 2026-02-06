@@ -28,6 +28,8 @@ class Client;
 
 class ClientHandle
 {
+    using Clock = std::chrono::high_resolution_clock;
+    using TimePoint = std::chrono::time_point<Clock>;
 public:
     ClientHandle(Client& iclient, std::string_view teamname);
     ClientHandle(ConnectionType conn_type, FileDescriptor socket, event_base* ebase,
@@ -50,10 +52,10 @@ public:
     bool Available(std::string_view type);
 
     Stream stream; // Only for UNIX/INTERNET
-    std::time_t last_error = 0;
 
     std::vector<std::string> unavailable;
     Client* client_ptr = nullptr; // Only for INTERNAL connections
+    TimePoint last_error = Clock::now();
 
     ConnectionType conn_type;
     ClientPreferences preferences;

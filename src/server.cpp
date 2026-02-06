@@ -60,9 +60,10 @@ tb::error<WriteError> ClientHandle::Write(const Message& msg)
 
 void ClientHandle::Error(std::string_view errstr)
 {
-    if (time(nullptr) - last_error < 1) return;
-    last_error = time(nullptr);
-
+    using Seconds = std::chrono::duration<double>;
+    if (Clock::now() - last_error < Seconds { 1 })
+        return;
+    last_error = Clock::now();
     bool success = Write({ .type { MSG_ERROR }, .content = errstr }).is_ok();
     if (!handshaken || !success) Disconnect("Failed handshake");
 }
