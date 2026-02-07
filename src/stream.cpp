@@ -143,13 +143,13 @@ auto Stream::WriteMessage(MessageFormat format, const Message& message)
 {
     clearerr(stream_handle_.get());
 
-    std::ignore = write_buffer_.WriteFromMemory(format);
+    write_buffer_.WriteFromMemory(format).ignore_error();
     switch (format) {
     case MessageFormat::JSON: {
         json object = message;
         std::string serialised = object.dump();
 
-        std::ignore = write_buffer_.WriteFromMemory<uint32_t>(serialised.size());
+        write_buffer_.WriteFromMemory<uint32_t>(serialised.size()).ignore_error();
         if (auto io_error = write_buffer_.WriteFromMemory(serialised);
             io_error.is_error())
             return io_error;
@@ -158,7 +158,7 @@ auto Stream::WriteMessage(MessageFormat format, const Message& message)
     case MessageFormat::MSGPACK: {
         std::vector<uint8_t> serialised = json::to_msgpack(message);
 
-        std::ignore = write_buffer_.WriteFromMemory<uint32_t>(serialised.size());
+        write_buffer_.WriteFromMemory<uint32_t>(serialised.size()).ignore_error();
         if (auto io_error = write_buffer_.WriteFromMemory(serialised);
             io_error.is_error())
             return io_error;
