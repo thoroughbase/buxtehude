@@ -13,6 +13,8 @@
 namespace buxtehude
 {
 
+constexpr int LIBEVENT_CHOSEN_BACKLOG = -1;
+
 ClientHandle::ClientHandle(Client& iclient, std::string_view teamname)
     : client_ptr(&iclient), conn_type(ConnectionType::INTERNAL), connected(true)
 {
@@ -127,16 +129,18 @@ tb::error<ListenError> Server::UnixServer(std::string_view path)
     unix_path = addr.sun_path;
 
     unix_listener = make<UEvconnListener>(
-        evconnlistener_new_bind(ebase.get(), callbacks::ConnectionCallback,
-                                &callback_data, LEV_OPT_CLOSE_ON_FREE,
-                                -1, reinterpret_cast<sockaddr*>(&addr), sizeof(addr))
+        evconnlistener_new_bind(
+            ebase.get(), callbacks::ConnectionCallback, &callback_data,
+            LEV_OPT_CLOSE_ON_FREE, LIBEVENT_CHOSEN_BACKLOG,
+            reinterpret_cast<sockaddr*>(&addr), sizeof(addr)
+        )
     );
 
     if (!unix_listener) {
         logger(LogLevel::WARNING,
             fmt::format("Failed to listen for UNIX domain connections at {}: {}",
                 path, strerror(errno)));
-        unix_server = -1;
+        unix_server = INVALID_FILE_DESCRIPTOR;
         return ListenError { ListenError::BIND_ERROR, errno };
     }
 
@@ -159,19 +163,19 @@ tb::error<ListenError> Server::IPServer(uint16_t port)
 
     if (INADDR_ANY) addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    // Passing -1 as the backlog allows libevent to try select an optimal backlog number.
     ip_listener = make<UEvconnListener>(
-        evconnlistener_new_bind(ebase.get(), callbacks::ConnectionCallback,
-                                &callback_data,
-                                LEV_OPT_REUSEABLE | LEV_OPT_CLOSE_ON_FREE, -1,
-                                reinterpret_cast<sockaddr*>(&addr), sizeof(addr))
+        evconnlistener_new_bind(
+            ebase.get(), callbacks::ConnectionCallback, &callback_data,
+            LEV_OPT_REUSEABLE | LEV_OPT_CLOSE_ON_FREE, LIBEVENT_CHOSEN_BACKLOG,
+            reinterpret_cast<sockaddr*>(&addr), sizeof(addr)
+        )
     );
 
     if (!ip_listener) {
         logger(LogLevel::WARNING,
             fmt::format("Failed to listen for internet domain connections on port {}: {}",
                 port, strerror(errno)));
-        ip_server = -1;
+        ip_server = INVALID_FILE_DESCRIPTOR;
         return ListenError { ListenError::BIND_ERROR, errno };
     }
 
@@ -199,7 +203,7 @@ void Server::Run()
     started = true;
 
     if (current_thread.joinable()) {
-        event_active(interrupt_event.get(), 0, 0);
+        evuser_trigger(interrupt_event.get());
         current_thread.join();
     }
 
@@ -210,7 +214,7 @@ void Server::Close()
 {
     logger(LogLevel::DEBUG, "Shutting down server");
     if (current_thread.joinable()) {
-        event_active(interrupt_event.get(), 0, 0);
+        evuser_trigger(interrupt_event.get());
         current_thread.join();
     }
 
@@ -261,7 +265,7 @@ void Server::Internal_ReceiveFrom(Client& cl, const Message& msg)
 {
     std::lock_guard<std::mutex> guard(internal_mutex);
     internal_messages.emplace_back(&cl, msg);
-    event_active(read_internal_event.get(), 0, 0);
+    evuser_trigger(read_internal_event.get());
 }
 
 // Reading from socket-based clients
@@ -354,12 +358,16 @@ tb::error<AllocError> Server::SetupEvents()
     callback_data.event_base = ebase.get();
 
     interrupt_event = make<UEvent>(
-        event_new(ebase.get(), -1, EV_PERSIST, callbacks::LoopInterruptCallback,
-                  &callback_data)
+        event_new(
+            ebase.get(), INVALID_FILE_DESCRIPTOR, EV_PERSIST,
+            callbacks::LoopInterruptCallback,  &callback_data
+        )
     );
 
     read_internal_event = make<UEvent>(
-        event_new(ebase.get(), -1, 0, callbacks::InternalReadCallback, &callback_data)
+        evuser_new(
+            ebase.get(), callbacks::InternalReadCallback, &callback_data
+        )
     );
 
     if (!ebase || !interrupt_event || !read_internal_event) {

@@ -46,7 +46,7 @@ tb::error<ConnectError> Client::IPConnect(std::string_view hostname, uint16_t po
     tb::scoped_guard addrinfo_guard = [res] () { freeaddrinfo(res); };
 
     int client_socket = socket(res->ai_family, res->ai_socktype, 0);
-    if (client_socket == -1)
+    if (client_socket == INVALID_FILE_DESCRIPTOR)
         return ConnectError { ConnectError::SOCKET_ERROR, errno };
 
     sockaddr_in* addr = reinterpret_cast<sockaddr_in*>(res->ai_addr);
@@ -246,7 +246,7 @@ void Client::Disconnect()
     logger(LogLevel::DEBUG, "Disconnecting client");
 
     if (conn_type != ConnectionType::INTERNAL) {
-        event_active(interrupt_event.get(), 0, 0);
+        evuser_trigger(interrupt_event.get());
     } else if (conn_type == ConnectionType::INTERNAL && server_ptr) {
         server_ptr.load()->Internal_RemoveClient(*this);
     }
@@ -278,8 +278,10 @@ tb::error<AllocError> Client::SetupEvents(FileDescriptor socket)
     callback_data.event_base = ebase.get();
 
     interrupt_event = make<UEvent>(
-        event_new(ebase.get(), -1, EV_PERSIST,
-                  callbacks::LoopInterruptCallback, &callback_data)
+        event_new(
+            ebase.get(), INVALID_FILE_DESCRIPTOR, EV_PERSIST,
+            callbacks::LoopInterruptCallback, &callback_data
+        )
     );
 
     if (!ebase || !interrupt_event) {
