@@ -1,6 +1,5 @@
 #include "core.hpp"
 
-#include <fmt/core.h>
 #include <event2/thread.h>
 
 #include <signal.h>

@@ -4,8 +4,6 @@
 #include "core.hpp"
 #include <tb/tb.h>
 
-#include <fmt/core.h>
-
 namespace buxtehude
 {
 

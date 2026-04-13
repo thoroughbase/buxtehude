@@ -6,8 +6,6 @@
 
 #include <string_view>
 
-#include <fmt/core.h>
-
 #include <chrono>
 
 namespace bux = buxtehude;
