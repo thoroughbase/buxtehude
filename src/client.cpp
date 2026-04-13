@@ -38,7 +38,7 @@ tb::error<ConnectError> Client::IPConnect(std::string_view hostname, uint16_t po
 
     if (int gai_error = getaddrinfo(hostname.data(), nullptr, &hints, &res)) {
         logger(LogLevel::WARNING,
-            fmt::format("Failed to connect to address {}: getaddrinfo failed: {}",
+            std::format("Failed to connect to address {}: getaddrinfo failed: {}",
                 hostname, gai_strerror(gai_error)));
         return ConnectError { ConnectError::GETADDRINFO_ERROR, gai_error };
     }
@@ -53,7 +53,7 @@ tb::error<ConnectError> Client::IPConnect(std::string_view hostname, uint16_t po
     addr->sin_port = htons(port);
 
     if (connect(client_socket, reinterpret_cast<sockaddr*>(addr), sizeof(sockaddr_in))) {
-        logger(LogLevel::WARNING, fmt::format("Failed to connect to address {}: {}",
+        logger(LogLevel::WARNING, std::format("Failed to connect to address {}: {}",
             hostname, strerror(errno)));
         return ConnectError { ConnectError::CONNECT_ERROR, errno };
     }
@@ -90,7 +90,7 @@ tb::error<ConnectError> Client::UnixConnect(std::string_view path)
     addr.sun_path[path_len] = '\0';
 
     if (connect(client_socket, reinterpret_cast<sockaddr*>(&addr), sizeof(sockaddr_un))) {
-        logger(LogLevel::WARNING, fmt::format("Failed to connect to file {}: {}",
+        logger(LogLevel::WARNING, std::format("Failed to connect to file {}: {}",
             path, strerror(errno)));
         return ConnectError { ConnectError::CONNECT_ERROR, errno };
     }
@@ -186,7 +186,7 @@ void Client::SetupDefaultHandlers()
             return;
         }
 
-        logger(LogLevel::INFO, fmt::format("Error message from server: {}",
+        logger(LogLevel::INFO, std::format("Error message from server: {}",
                m.content.get<std::string>()));
     });
 }

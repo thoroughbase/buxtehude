@@ -1,7 +1,5 @@
 #include "server.hpp"
 
-#include <fmt/core.h>
-
 #include "client.hpp"
 
 #include <tb/tb.h>
@@ -91,7 +89,7 @@ void ClientHandle::Disconnect_NoWrite()
     } else if (conn_type == ConnectionType::INTERNAL) {
         client_ptr->Internal_Disconnect();
     }
-    logger(LogLevel::DEBUG, fmt::format("Disconnecting client {}",
+    logger(LogLevel::DEBUG, std::format("Disconnecting client {}",
         preferences.teamname));
     connected = false;
 }
@@ -138,7 +136,7 @@ tb::error<ListenError> Server::UnixServer(std::string_view path)
 
     if (!unix_listener) {
         logger(LogLevel::WARNING,
-            fmt::format("Failed to listen for UNIX domain connections at {}: {}",
+            std::format("Failed to listen for UNIX domain connections at {}: {}",
                 path, strerror(errno)));
         unix_server = INVALID_FILE_DESCRIPTOR;
         return ListenError { ListenError::BIND_ERROR, errno };
@@ -147,7 +145,7 @@ tb::error<ListenError> Server::UnixServer(std::string_view path)
     unix_server = evconnlistener_get_fd(unix_listener.get());
 
     Run();
-    logger(LogLevel::DEBUG, fmt::format("Listening on file {}", path));
+    logger(LogLevel::DEBUG, std::format("Listening on file {}", path));
 
     return tb::ok;
 }
@@ -173,7 +171,7 @@ tb::error<ListenError> Server::IPServer(uint16_t port)
 
     if (!ip_listener) {
         logger(LogLevel::WARNING,
-            fmt::format("Failed to listen for internet domain connections on port {}: {}",
+            std::format("Failed to listen for internet domain connections on port {}: {}",
                 port, strerror(errno)));
         ip_server = INVALID_FILE_DESCRIPTOR;
         return ListenError { ListenError::BIND_ERROR, errno };
@@ -182,7 +180,7 @@ tb::error<ListenError> Server::IPServer(uint16_t port)
     ip_server = evconnlistener_get_fd(ip_listener.get());
 
     Run();
-    logger(LogLevel::DEBUG, fmt::format("Listening on port {}", port));
+    logger(LogLevel::DEBUG, std::format("Listening on port {}", port));
 
     return tb::ok;
 }
@@ -452,7 +450,7 @@ void Server::AddConnection(int fd, sa_family_t addr_family)
     clients.emplace_back(conn_type, fd, ebase.get(), callback_data);
 
     logger(LogLevel::DEBUG,
-        fmt::format("New client connected on {} domain, fd = {}", debug_string, fd));
+        std::format("New client connected on {} domain, fd = {}", debug_string, fd));
 }
 
 // ClientHandle iteration
@@ -467,7 +465,7 @@ auto Server::GetClientBySocket(int fd) -> HandleIter
 
     if (iter == clients.end())
         logger(LogLevel::WARNING,
-            fmt::format("No client with file descriptor {} found", fd));
+            std::format("No client with file descriptor {} found", fd));
 
     return iter;
 }
@@ -482,7 +480,7 @@ auto Server::GetClientByPointer(Client* ptr) -> HandleIter
 
     if (iter == clients.end())
         logger(LogLevel::WARNING,
-            fmt::format("No client with pointer {} found",
+            std::format("No client with pointer {} found",
                         static_cast<void*>(ptr)));
 
     return iter;

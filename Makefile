@@ -2,7 +2,7 @@ BUILD_DIR := ./build
 BUXTEHUDE_INCLUDE_DIR := include
 INCLUDE_DIRS := $(BUXTEHUDE_INCLUDE_DIR)
 INCLUDE := $(addprefix -I,$(INCLUDE_DIRS))
-LIBRARIES := -lfmt -levent_core -levent_pthreads
+LIBRARIES := -levent_core -levent_pthreads
 CXXFLAGS := -Wall -std=c++20
 CPPFLAGS := $(INCLUDE) -MMD -MP
 LDRPATH := /usr/local/lib

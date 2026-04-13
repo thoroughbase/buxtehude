@@ -36,7 +36,7 @@ void DefaultLog(LogLevel l, std::string_view message)
     constexpr static std::string_view LEVEL_NAMES[] = {
         "DEBUG", "INFO", "WARNING", "SEVERE"
     };
-    fmt::print("[{}] {}\n", LEVEL_NAMES[static_cast<size_t>(l)], message);
+    tb::print("[{}] {}\n", LEVEL_NAMES[static_cast<size_t>(l)], message);
 }
 
 void Initialise(LogCallback logcb, SignalHandler sigh)

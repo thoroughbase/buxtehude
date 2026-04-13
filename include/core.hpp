@@ -15,8 +15,6 @@
 #include <sys/types.h>
 #include <sys/un.h>
 
-#include <fmt/core.h>
-
 #include "validate.hpp"
 
 #include <fcntl.h>
@@ -75,13 +73,13 @@ struct ConnectError
     {
         switch (type) {
         case GETADDRINFO_ERROR:
-            return fmt::format("getaddrinfo error: {}", gai_strerror(code));
+            return std::format("getaddrinfo error: {}", gai_strerror(code));
         case CONNECT_ERROR:
-            return fmt::format("connect error: {}", strerror(code));
+            return std::format("connect error: {}", strerror(code));
         case LIBEVENT_ERROR:
             return "libevent structure initialisation error";
         case SOCKET_ERROR:
-            return fmt::format("socket error: {}", strerror(code));
+            return std::format("socket error: {}", strerror(code));
         case WRITE_ERROR:
             return "handshake write error";
         case ALREADY_CONNECTED:
@@ -106,7 +104,7 @@ struct ListenError
         case LIBEVENT_ERROR:
             return "libevent structure initialisation error";
         case BIND_ERROR:
-            return fmt::format("bind error: {}", strerror(code));
+            return std::format("bind error: {}", strerror(code));
         }
     }
 };
