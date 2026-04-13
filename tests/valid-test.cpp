@@ -3,6 +3,8 @@
 #include <nlohmann/json.hpp>
 #include <buxtehude/validate.hpp>
 
+#include <tb/tb.h>
+
 int main()
 {
     using namespace buxtehude;
@@ -40,7 +42,7 @@ int main()
         { "/famous"_json_pointer, predicates::Inverse(predicates::Compare(true)) }
     }) == false);
 
-    printf("Test (%s) completed successfully\n", __FILE__);
+    tb::print("Test ({}) completed successfully\n", __FILE__);
 
     return 0;
 }

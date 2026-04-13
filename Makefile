@@ -43,7 +43,7 @@ TEST_BUX_TARGET := bux-test
 TEST_BUX_SOURCE := tests/bux-test.cpp
 TEST_BUX_OBJECTS := $(TEST_BUX_SOURCE:%.cpp=$(BUILD_DIR)/%.o)
 TEST_BUX_DEPENDENCIES := $(TEST_BUX_OBJECTS:%.o=%.d)
-TEST_BUX_LDFLAGS := -rpath $(LDRPATH) -lbuxtehude -lfmt
+TEST_BUX_LDFLAGS := -rpath $(LDRPATH) -lbuxtehude
 
 $(TEST_BUX_TARGET): $(TEST_BUX_OBJECTS)
 	$(CXX) $(TEST_BUX_LDFLAGS) $^ -o $@
