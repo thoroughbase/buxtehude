@@ -238,7 +238,7 @@ void Server::Broadcast_NoLock(const Message& m)
 
 void Server::Internal_AddClient(Client& cl)
 {
-    std::lock_guard<std::mutex> guard(clients_mutex);
+    std::scoped_lock guard(clients_mutex);
     auto& handle = clients.emplace_back(cl, cl.preferences.teamname);
 
     if (handle.Handshake().is_error()) handle.Disconnect_NoWrite();
@@ -246,7 +246,7 @@ void Server::Internal_AddClient(Client& cl)
 
 void Server::Internal_RemoveClient(Client& to_remove)
 {
-    std::lock_guard<std::mutex> guard(clients_mutex);
+    std::scoped_lock guard(clients_mutex);
     std::erase_if(clients, [&to_remove] (ClientHandle& handle) {
         return handle.client_ptr == &to_remove;
     });
@@ -261,7 +261,7 @@ void Server::Internal_RemoveClient(Client& to_remove)
 
 void Server::Internal_ReceiveFrom(Client& cl, const Message& msg)
 {
-    std::lock_guard<std::mutex> guard(internal_mutex);
+    std::scoped_lock guard(internal_mutex);
     internal_messages.emplace_back(&cl, msg);
     evuser_trigger(read_internal_event.get());
 }
@@ -381,12 +381,12 @@ void Server::Listen()
     while (event_base_loop(ebase.get(), EVLOOP_NO_EXIT_ON_EMPTY) == 0) {
         switch (callback_data.type) {
         case EventType::NEW_CONNECTION: {
-            std::lock_guard<std::mutex> guard(clients_mutex);
+            std::scoped_lock guard(clients_mutex);
             AddConnection(callback_data.socket, callback_data.address.sa_family);
             break;
         }
         case EventType::READ_READY: {
-            std::lock_guard<std::mutex> guard(clients_mutex);
+            std::scoped_lock guard(clients_mutex);
             Server::HandleIter iter = GetClientBySocket(callback_data.socket);
             if (iter == clients.end()) break;
             Serve(iter);
@@ -404,10 +404,10 @@ void Server::Listen()
             event_del(read_internal_event.get());
             std::vector<std::pair<Client*, Message>> messages;
             {
-                std::lock_guard<std::mutex> guard(internal_mutex);
+                std::scoped_lock guard(internal_mutex);
                 messages = std::move(internal_messages);
             }
-            std::lock_guard<std::mutex> guard(clients_mutex);
+            std::scoped_lock guard(clients_mutex);
             for (auto& [client_ptr, message] : messages) {
                 Server::HandleIter iter = GetClientByPointer(client_ptr);
                 if (iter == clients.end()) continue;
@@ -418,7 +418,7 @@ void Server::Listen()
         case EventType::INTERRUPT:
             return;
         case EventType::WRITE_READY:
-            std::lock_guard<std::mutex> guard(clients_mutex);
+            std::scoped_lock guard(clients_mutex);
             Server::HandleIter iter = GetClientBySocket(callback_data.socket);
             if (iter == clients.end()) break;
 
