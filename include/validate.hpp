@@ -17,7 +17,7 @@ using Predicate = std::function<bool(const json& j)>;
 using ValidationPair = std::pair<json_pointer<std::string>, Predicate>;
 using ValidationSeries = std::initializer_list<ValidationPair>;
 
-bool ValidateJSON(const json& j, const ValidationSeries& tests);
+auto ValidateJSON(const json& j, const ValidationSeries& tests) -> bool;
 
 namespace predicates
 {
@@ -25,14 +25,14 @@ namespace predicates
 struct Compare
 {
     Compare(const json& j) : cmp(j) {}
-    bool operator()(const json& j) { return j == cmp; }
+    auto operator()(const json& j) -> bool { return j == cmp; }
     const json cmp;
 };
 
 struct Matches
 {
     Matches(const std::initializer_list<json>& j) : cmp(j) {}
-    bool operator()(const json& j)
+    auto operator()(const json& j) -> bool
     {
         for (const json& x : cmp) if (j == x) return true;
         return false;
@@ -43,7 +43,7 @@ struct Matches
 struct Inverse
 {
     Inverse(const Predicate& p) : pred(p) {}
-    bool operator()(const json& j) { return !pred(j); }
+    auto operator()(const json& j) -> bool { return !pred(j); }
     Predicate pred;
 };
 

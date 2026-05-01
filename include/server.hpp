@@ -43,13 +43,13 @@ public:
     ~ClientHandle() = default;
 
     // Applicable to all types of ClientHandle
-    tb::error<WriteError> Handshake();
-    tb::error<WriteError> Write(const Message& m);
+    auto Handshake() -> tb::error<WriteError>;
+    auto Write(const Message& m) -> tb::error<WriteError>;
     void Error(std::string_view errstr);
     void Disconnect(std::string_view reason="Disconnected by server");
     void Disconnect_NoWrite();
 
-    bool Available(std::string_view type);
+    auto Available(std::string_view type) -> bool;
 
     Stream stream; // Only for UNIX/INTERNET
 
@@ -71,9 +71,9 @@ public:
     Server(const Server& other) = delete;
     ~Server();
 
-    tb::error<ListenError> UnixServer(std::string_view path="buxtehude_unix");
-    tb::error<ListenError> IPServer(uint16_t port=DEFAULT_PORT);
-    tb::error<AllocError> InternalServer();
+    auto UnixServer(std::string_view path="buxtehude_unix") -> tb::error<ListenError>;
+    auto IPServer(uint16_t port=DEFAULT_PORT) -> tb::error<ListenError>;
+    auto InternalServer() -> tb::error<AllocError>;
 
     void Close();
 private: // For INTERNAL connections only.
@@ -90,15 +90,15 @@ private:
     void Broadcast_NoLock(const Message& msg);
 
     // Only if listening sockets are opened
-    tb::error<AllocError> SetupEvents();
+    auto SetupEvents() -> tb::error<AllocError>;
     void Listen();
     void AddConnection(FileDescriptor socket, sa_family_t addr_type);
 
     // Retrieving clients
-    HandleIter GetClientBySocket(int fd);
-    HandleIter GetClientByPointer(Client* ptr);
-    HandleIter GetFirstAvailable(std::string_view team, std::string_view type,
-        const ClientHandle& exclude);
+    auto GetClientBySocket(int fd) -> HandleIter;
+    auto GetClientByPointer(Client* ptr) -> HandleIter;
+    auto GetFirstAvailable(std::string_view team, std::string_view type,
+        const ClientHandle& exclude) -> HandleIter;
 
     std::vector<ClientHandle> clients;
     std::vector<std::pair<Client*, Message>> internal_messages;

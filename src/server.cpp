@@ -34,7 +34,7 @@ ClientHandle::ClientHandle(ConnectionType conn_type, FileDescriptor socket,
 
 // Common ClientHandle functions
 
-tb::error<WriteError> ClientHandle::Handshake()
+auto ClientHandle::Handshake() -> tb::error<WriteError>
 {
     return Write({
         .type { MSG_HANDSHAKE },
@@ -44,7 +44,7 @@ tb::error<WriteError> ClientHandle::Handshake()
     });
 }
 
-tb::error<WriteError> ClientHandle::Write(const Message& msg)
+auto ClientHandle::Write(const Message& msg) -> tb::error<WriteError>
 {
     if (!connected) return WriteError {};
 
@@ -94,7 +94,7 @@ void ClientHandle::Disconnect_NoWrite()
     connected = false;
 }
 
-bool ClientHandle::Available(std::string_view type)
+auto ClientHandle::Available(std::string_view type) -> bool
 {
     return std::ranges::find(unavailable, type) == unavailable.end();
 }
@@ -111,7 +111,7 @@ Server::~Server()
 
 // Listening socket setup
 
-tb::error<ListenError> Server::UnixServer(std::string_view path)
+auto Server::UnixServer(std::string_view path) -> tb::error<ListenError>
 {
     if (SetupEvents().is_error())
         return ListenError { ListenError::LIBEVENT_ERROR };
@@ -150,7 +150,7 @@ tb::error<ListenError> Server::UnixServer(std::string_view path)
     return tb::ok;
 }
 
-tb::error<ListenError> Server::IPServer(uint16_t port)
+auto Server::IPServer(uint16_t port) -> tb::error<ListenError>
 {
     if (SetupEvents().is_error())
         return ListenError { ListenError::LIBEVENT_ERROR };
@@ -185,7 +185,7 @@ tb::error<ListenError> Server::IPServer(uint16_t port)
     return tb::ok;
 }
 
-tb::error<AllocError> Server::InternalServer()
+auto Server::InternalServer() -> tb::error<AllocError>
 {
     if (SetupEvents().is_error()) return AllocError {};
 
@@ -348,7 +348,7 @@ void Server::HandleMessage(ClientHandle& client_handle, Message&& msg)
 
 // Libevent setup
 
-tb::error<AllocError> Server::SetupEvents()
+auto Server::SetupEvents() -> tb::error<AllocError>
 {
     if (ebase) return tb::ok;
 

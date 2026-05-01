@@ -30,21 +30,21 @@ public:
     Client(const ClientPreferences& preferences);
     ~Client();
 
-    tb::error<ConnectError> IPConnect(std::string_view hostname, uint16_t port);
-    tb::error<ConnectError> UnixConnect(std::string_view path);
-    tb::error<ConnectError> InternalConnect(Server& server);
+    auto IPConnect(std::string_view hostname, uint16_t port) -> tb::error<ConnectError>;
+    auto UnixConnect(std::string_view path) -> tb::error<ConnectError>;
+    auto InternalConnect(Server& server) -> tb::error<ConnectError>;
 
     void Disconnect();
 
-    tb::error<WriteError> Write(const Message& msg);
-    tb::error<WriteError> SetAvailable(std::string_view type, bool available);
+    auto Write(const Message& msg) -> tb::error<WriteError>;
+    auto SetAvailable(std::string_view type, bool available) -> tb::error<WriteError>;
 
     void AddHandler(std::string_view type, Handler&& h);
     void SetDisconnectHandler(DisconnectHandler&& h);
     void EraseHandler(const std::string& type);
     void ClearHandlers();
 
-    bool Connected() const;
+    auto Connected() const -> bool;
 
     ClientPreferences preferences;
 private: // Only for INTERNAL clients
@@ -54,13 +54,13 @@ private: // Only for INTERNAL clients
     void Internal_Disconnect();
 private:
     // Only for socket-based connections
-    tb::error<AllocError> SetupEvents(FileDescriptor socket);
+    auto SetupEvents(FileDescriptor socket) -> tb::error<AllocError>;
     void StartListening();
     void Read();
     void Listen();
 
     void HandleMessage(const Message& msg);
-    tb::error<WriteError> Handshake();
+    auto Handshake() -> tb::error<WriteError>;
     void SetupDefaultHandlers();
 
     ConnectionType conn_type;

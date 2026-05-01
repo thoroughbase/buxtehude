@@ -69,7 +69,7 @@ struct ConnectError
     Type type;
     ErrnoCode code = ERRNO_NO_ERROR;
 
-    std::string What() const
+    auto What() const -> std::string
     {
         switch (type) {
         case GETADDRINFO_ERROR:
@@ -98,7 +98,7 @@ struct ListenError
     Type type;
     ErrnoCode code = ERRNO_NO_ERROR;
 
-    std::string What() const
+    auto What() const -> std::string
     {
         switch (type) {
         case LIBEVENT_ERROR:
@@ -113,7 +113,7 @@ struct WriteError {};
 struct AllocError {};
 
 template<typename T>
-T make(typename T::element_type* ptr) { return T { ptr }; }
+auto make(typename T::element_type* ptr) -> T { return T { ptr }; }
 
 using UEvent = std::unique_ptr<event, tb::deleter<event_free>>;
 using UEventBase = std::unique_ptr<event_base, tb::deleter<event_base_free>>;

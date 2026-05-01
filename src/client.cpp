@@ -21,7 +21,8 @@ Client::Client(const ClientPreferences& preferences) : preferences(preferences) 
 
 // Connection setup functions
 
-tb::error<ConnectError> Client::IPConnect(std::string_view hostname, uint16_t port)
+auto Client::IPConnect(std::string_view hostname, uint16_t port)
+-> tb::error<ConnectError>
 {
     if (connected) return ConnectError { ConnectError::ALREADY_CONNECTED };
 
@@ -69,7 +70,7 @@ tb::error<ConnectError> Client::IPConnect(std::string_view hostname, uint16_t po
     return tb::ok;
 }
 
-tb::error<ConnectError> Client::UnixConnect(std::string_view path)
+auto Client::UnixConnect(std::string_view path) -> tb::error<ConnectError>
 {
     if (connected) return ConnectError { ConnectError::ALREADY_CONNECTED };
 
@@ -106,7 +107,7 @@ tb::error<ConnectError> Client::UnixConnect(std::string_view path)
     return tb::ok;
 }
 
-tb::error<ConnectError> Client::InternalConnect(Server& server)
+auto Client::InternalConnect(Server& server) -> tb::error<ConnectError>
 {
     if (connected) return ConnectError { ConnectError::ALREADY_CONNECTED };
 
@@ -130,7 +131,7 @@ tb::error<ConnectError> Client::InternalConnect(Server& server)
 
 // General functions applicable to all types of Client
 
-tb::error<WriteError> Client::Write(const Message& msg)
+auto Client::Write(const Message& msg) -> tb::error<WriteError>
 {
     if (!connected) return WriteError {};
 
@@ -152,7 +153,7 @@ tb::error<WriteError> Client::Write(const Message& msg)
     return tb::ok;
 }
 
-tb::error<WriteError> Client::Handshake()
+auto Client::Handshake() -> tb::error<WriteError>
 {
     SetupDefaultHandlers();
 
@@ -189,7 +190,7 @@ void Client::SetupDefaultHandlers()
     });
 }
 
-tb::error<WriteError> Client::SetAvailable(std::string_view type, bool available)
+auto Client::SetAvailable(std::string_view type, bool available) -> tb::error<WriteError>
 {
     return Write({
         .type { MSG_AVAILABLE },
@@ -226,7 +227,7 @@ void Client::EraseHandler(const std::string& type) { handlers.erase(type); }
 
 void Client::ClearHandlers() { handlers.clear(); }
 
-bool Client::Connected() const { return connected; }
+auto Client::Connected() const -> bool { return connected; }
 
 void Client::StartListening()
 {
@@ -270,7 +271,7 @@ void Client::Internal_Receive(const Message& msg)
 
 // Socket-based connections only
 
-tb::error<AllocError> Client::SetupEvents(FileDescriptor socket)
+auto Client::SetupEvents(FileDescriptor socket) -> tb::error<AllocError>
 {
     ebase = make<UEventBase>(event_base_new());
     callback_data.event_base = ebase.get();

@@ -2,7 +2,7 @@
 
 namespace buxtehude {
 
-bool ValidateJSON(const json& j, const ValidationSeries& tests)
+auto ValidateJSON(const json& j, const ValidationSeries& tests) -> bool
 {
     for (auto& [ptr, pred] : tests) {
         if (!j.contains(ptr)) return false;
